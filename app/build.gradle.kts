@@ -27,25 +27,29 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
         isCoreLibraryDesugaringEnabled = true
     }
+
     kotlinOptions {
         jvmTarget = "11"
     }
+
     buildFeatures {
         compose = true
     }
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.2")
+    // Desugar kütüphanesi güncel sürüm
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.5")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.3")
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
@@ -53,15 +57,18 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation("androidx.compose.material:material-icons-extended")
-    // Calendar and helpers
+
+    // Calendar ve yardımcı kütüphaneler
     implementation("io.github.boguszpawlowski.composecalendar:composecalendar:1.4.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
-    implementation("com.google.code.gson:gson:2.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
+    implementation("com.google.code.gson:gson:2.13.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }

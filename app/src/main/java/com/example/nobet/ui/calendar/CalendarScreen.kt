@@ -20,19 +20,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.boguszpawlowski.composecalendar.SelectableCalendar
 import io.github.boguszpawlowski.composecalendar.rememberSelectableCalendarState
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 
-// --- Enum ShiftType ---
-enum class ShiftType(val label: String, val hours: Int, val color: Color) {
-    MORNING("8-16", 8, Color(0xFF64B5F6)),    // Açık mavi
-    NIGHT("16-8", 16, Color(0xFF9575CD)),     // Açık mor
-    FULL("8-8", 24, Color(0xFFF44336)),       // Parlak kırmızı
-    DAY16("8-24", 16, Color(0xFF4CAF50)),     // Yeşil
-    EVENING("16-24", 8, Color(0xFFFF9800))    // Turuncu
-}
-// --- CalendarScreen --- (AYRAÇLI)
+// --- CalendarScreen ---
 @Composable
 fun CalendarScreen(padding: PaddingValues, vm: ScheduleViewModel = viewModel()) {
     var currentMonth by remember { mutableStateOf(YearMonth.now()) }
@@ -41,6 +34,7 @@ fun CalendarScreen(padding: PaddingValues, vm: ScheduleViewModel = viewModel()) 
     var selectedShiftColor by remember { mutableStateOf<Color?>(null) }
 
     val locale = java.util.Locale.forLanguageTag("tr-TR")
+    val overtimeResult = vm.calculateOvertime(currentMonth)
 
     Column(
         modifier = Modifier
@@ -63,7 +57,7 @@ fun CalendarScreen(padding: PaddingValues, vm: ScheduleViewModel = viewModel()) 
         }
         Spacer(Modifier.height(8.dp))
 
-        // Takvim Başlığı
+        // Ay navigasyonu
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -74,9 +68,8 @@ fun CalendarScreen(padding: PaddingValues, vm: ScheduleViewModel = viewModel()) 
             }
 
             val monthText = currentMonth.month.getDisplayName(TextStyle.FULL, locale)
-            val title = "$monthText ${currentMonth.year}"
             Text(
-                title.replaceFirstChar { it.titlecase(locale) },
+                "${monthText.replaceFirstChar { it.titlecase(locale) }} ${currentMonth.year}",
                 style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f)
@@ -107,35 +100,62 @@ fun CalendarScreen(padding: PaddingValues, vm: ScheduleViewModel = viewModel()) 
                     )
                 },
                 monthHeader = { monthState -> currentMonth = monthState.currentMonth },
-                firstDayOfWeek = java.time.DayOfWeek.MONDAY
+                firstDayOfWeek = DayOfWeek.MONDAY
             )
         }
 
-        // TAKVİM İLE SAATLER ARASI AYRAÇ
         Spacer(Modifier.height(16.dp))
-        HorizontalDivider(
-            color = Color.Gray.copy(alpha = 0.3f),
-            thickness = 1.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-        )
+        HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
         Spacer(Modifier.height(16.dp))
 
-        // Legend (Saatler)
+        // Legend
         Legend()
         Spacer(Modifier.height(16.dp))
 
-        // Toplam Çalışma Saatleri
-        val total = vm.totalFor(currentMonth)
-        val monthTextDisplay = currentMonth.month.getDisplayName(TextStyle.FULL, locale)
-        val header = "${monthTextDisplay.replaceFirstChar { it.titlecase(locale) }} ${currentMonth.year} Toplam Çalışma Saatin: $total"
-        Text(
-            text = header,
-            style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp),
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center
-        )
+        // İstatistikler
+        val monthText = currentMonth.month.getDisplayName(TextStyle.FULL, locale)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Toplam çalışma saati
+            Text(
+                text = "${monthText.replaceFirstChar { it.titlecase(locale) }} ${currentMonth.year} Toplam Çalışma Saatin: ${overtimeResult.workedHours}",
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp),
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            // Fazla mesai bilgisi
+            if (overtimeResult.overtimeHours != 0) {
+                val overtimeText = if (overtimeResult.overtimeHours > 0) {
+                    "✅ Fazla mesai: +${overtimeResult.overtimeHours} saat"
+                } else {
+                    "⚠️ Eksik mesai: ${overtimeResult.overtimeHours} saat"
+                }
+
+                Text(
+                    text = overtimeText,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 14.sp,
+                        color = if (overtimeResult.overtimeHours > 0) Color.Green else Color.Red
+                    ),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            // Detaylı bilgi
+            Text(
+                text = "Çalışılan gün: ${overtimeResult.workingDays} gün × 8 saat = ${overtimeResult.expectedHours} saat",
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                color = Color.Gray
+            )
+        }
     }
 
     if (dialogFor != null) {
@@ -146,7 +166,8 @@ fun CalendarScreen(padding: PaddingValues, vm: ScheduleViewModel = viewModel()) 
         )
     }
 }
-// --- DayCell ---
+
+// --- Gün Hücresi ---
 @Composable
 private fun DayCell(
     date: LocalDate,
@@ -156,12 +177,14 @@ private fun DayCell(
     onClick: (LocalDate) -> Unit
 ) {
     val shift = schedule[date]
-    val isWeekend = date.dayOfWeek == java.time.DayOfWeek.SATURDAY || date.dayOfWeek == java.time.DayOfWeek.SUNDAY
+    val isWeekend = date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY
+    val isToday = date == LocalDate.now()
 
     val bgColor: Color = when {
         shift != null -> shift.color
         isSelected && selectedShiftColor != null -> selectedShiftColor.copy(alpha = 0.7f)
         isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+        isToday -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)
         isWeekend -> Color.LightGray.copy(alpha = 0.2f)
         else -> Color.Transparent
     }
@@ -193,7 +216,7 @@ private fun DayCell(
     }
 }
 
-// --- Legend --- (BÜYÜK RENK KUTULARI VE BÜYÜK YAZI)
+// --- Legend ---
 @Composable
 private fun Legend() {
     Column(
@@ -202,7 +225,6 @@ private fun Legend() {
             .padding(vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 1. Satır: İlk 3 öğe
         Row(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
@@ -215,7 +237,6 @@ private fun Legend() {
 
         Spacer(Modifier.height(16.dp))
 
-        // 2. Satır: Son 2 öğe
         Row(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
@@ -232,22 +253,19 @@ private fun ShiftType.LegendBoxLarge(showSeparator: Boolean) {
     Row(
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // BÜYÜK renk kutusu
         Box(
             modifier = Modifier
-                .size(28.dp) // Çok büyük renk kutusu
+                .size(28.dp)
                 .clip(CircleShape)
                 .background(this@LegendBoxLarge.color)
         )
         Spacer(Modifier.width(12.dp))
-        // BÜYÜK saat yazısı
         Text(
             text = this@LegendBoxLarge.label,
-            fontSize = 18.sp, // Büyük font
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold
         )
 
-        // Ayraç
         if (showSeparator) {
             Spacer(Modifier.width(12.dp))
             Text(
@@ -259,27 +277,6 @@ private fun ShiftType.LegendBoxLarge(showSeparator: Boolean) {
             )
             Spacer(Modifier.width(12.dp))
         }
-    }
-}
-
-@Composable
-private fun LegendItem(type: ShiftType) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(horizontal = 8.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(16.dp)
-                .clip(CircleShape)
-                .background(type.color)
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = type.label,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold
-        )
     }
 }
 
